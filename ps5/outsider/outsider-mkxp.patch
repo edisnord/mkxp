@@ -1,0 +1,128 @@
+diff --git a/cmake/ps5.cmake b/cmake/ps5.cmake
+index b5700ff..b1a401f 100644
+--- a/cmake/ps5.cmake
++++ b/cmake/ps5.cmake
+@@ -30,7 +30,7 @@ foreach(v RMMZ_PS5_PREFIX RMMZ_PS5_SOLOUD_DIR)
+         message(FATAL_ERROR "${v} must be set")
+     endif()
+ endforeach()
+-if(NOT RMMZ_PS5_HOST AND NOT RMMZ_PS5_SHIM_DIR)
++if(NOT RMMZ_PS5_HOST AND NOT RMMZ_PS5_EMBED AND NOT RMMZ_PS5_SHIM_DIR)
+     message(FATAL_ERROR "RMMZ_PS5_SHIM_DIR must be set")
+ endif()
+ 
+@@ -77,7 +77,8 @@ target_compile_definitions(soloud PRIVATE WITH_SDL2_STATIC WITH_NULL)
+ target_compile_options(soloud PRIVATE ${RMMZ_PS5_SDL_CFLAGS})
+ 
+ # --- the runtime ----------------------------------------------------------------------------------
+-if(NOT RMMZ_PS5_HOST)
++# Embedded, the program it is linked into applies the shim to everything
++if(NOT RMMZ_PS5_HOST AND NOT RMMZ_PS5_EMBED)
+     set(RMMZ_PS5_WRAP_FILE ${RMMZ_PS5_SHIM_DIR}/wrap-flags.txt)
+     file(READ ${RMMZ_PS5_WRAP_FILE} RMMZ_PS5_WRAP)
+     string(STRIP "${RMMZ_PS5_WRAP}" RMMZ_PS5_WRAP)
+@@ -87,7 +88,19 @@ else()
+     set(RMMZ_PS5_SHIM_SOURCE "")
+ endif()
+ 
+-add_executable(outsider
++# RMMZ_PS5_EMBED=ON builds a static library with outsider_main() in place of main(), for linking into another
++# program (mkxp's PS5 native title); RMMZ_PS5_GPU=ON draws with GPU OpenGL there (ps5-opengl) instead of OSMesa.
++option(RMMZ_PS5_EMBED "Build a library with outsider_main() instead of the executable" OFF)
++option(RMMZ_PS5_GPU "Native title: GPU OpenGL through ps5-opengl" OFF)
++macro(rmmz_ps5_target name)
++    if(RMMZ_PS5_EMBED)
++        add_library(${name} STATIC ${ARGN})
++    else()
++        add_executable(${name} ${ARGN})
++    endif()
++endmacro()
++
++rmmz_ps5_target(outsider
+     src/main.c
+     src/rendering/gl_loader.c
+     src/rendering/gl_ps5.c
+@@ -140,14 +153,18 @@ target_compile_definitions(outsider PRIVATE
+     RMMZ_DEFAULT_HEIGHT=${RMMZ_DEFAULT_HEIGHT}
+     RMMZ_HAS_GL
+     RMMZ_PS5
++    $<$<BOOL:${RMMZ_PS5_EMBED}>:RMMZ_EMBEDDED>
++    $<$<BOOL:${RMMZ_PS5_GPU}>:RMMZ_PS5_GPU>
+ )
+ target_compile_options(outsider PRIVATE ${RMMZ_PS5_SDL_CFLAGS})
+ 
+ # --export-dynamic: OSMesa is loaded with dlopen and imports libc functions from this executable; the
+ # console's runtime linker only resolves symbols that the executable exports.
+ # The version script keeps our gl* wrappers (gl_ps5.c) out of the exported symbols, see ps5-exports.map.
+-target_link_options(outsider PRIVATE -Wl,--export-dynamic
+-    -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ps5-exports.map ${RMMZ_PS5_WRAP})
++if(NOT RMMZ_PS5_EMBED)
++    target_link_options(outsider PRIVATE -Wl,--export-dynamic
++        -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ps5-exports.map ${RMMZ_PS5_WRAP})
++endif()
+ # WebP pictures (some games name them .png); libwebp comes from the same prefix as QuickJS
+ if(EXISTS ${RMMZ_PS5_PREFIX}/lib/libwebp.a AND EXISTS ${RMMZ_PS5_PREFIX}/include/webp/decode.h)
+     target_compile_definitions(outsider PRIVATE RMMZ_HAVE_WEBP)
+diff --git a/src/main.c b/src/main.c
+index 961a5dd..b55aab7 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -3,6 +3,12 @@
+  * SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-GeneralArcade-Commercial
+  */
+ 
++/* Linked into another program (mkxp's PS5 native title), which calls
++   outsider_main() with the game folder instead of main() */
++#ifdef RMMZ_EMBEDDED
++#define main outsider_main
++#endif
++
+ #include "platform/platform.h"
+ #include "engine/js_engine.h"
+ #include "engine/game_loop.h"
+diff --git a/src/platform/platform_sdl2.c b/src/platform/platform_sdl2.c
+index a69f6f9..507b1c8 100644
+--- a/src/platform/platform_sdl2.c
++++ b/src/platform/platform_sdl2.c
+@@ -972,6 +972,16 @@ Platform *platform_init(const char *title, int width, int height)
+             height = mode.h;
+         }
+     }
++#ifdef RMMZ_PS5_GPU
++    /* Native title with GPU OpenGL (ps5-opengl): its SDL driver takes exactly one fixed, display-sized
++       window and an OpenGL 3.3 core context request. Mesa returns its newest core version for that, which
++       has the direct state access of 4.5. */
++    flags = SDL_WINDOW_OPENGL;
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
++    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
++#endif
+ #else
+     /* OpenGL 4.5: the renderer relies on direct state access. */
+     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+@@ -1277,7 +1287,7 @@ void platform_request_dump(Platform *p, const char *path)
+ 
+ bool platform_cpu_present_available(Platform *p)
+ {
+-#ifdef __SCE__
++#if defined(__SCE__) && !defined(RMMZ_PS5_GPU)
+     if (s_cpu_present_off < 0) s_cpu_present_off = getenv("RMMZ_GL_PRESENT") != NULL;
+     return !s_cpu_present_off && p && p->window;
+ #else
+diff --git a/src/shims/dom_shim.js b/src/shims/dom_shim.js
+index 35d72f2..00ea4e3 100644
+--- a/src/shims/dom_shim.js
++++ b/src/shims/dom_shim.js
+@@ -1621,7 +1621,10 @@
+     };
+ 
+     window.open = function() { return null; };
+-    window.close = function() {};
++    /* NW.js closes the game (SceneManager.exit, "Quit Game" on the title screen) */
++    window.close = function() {
++        if (typeof __native_platform !== "undefined") __native_platform.quit();
++    };
+     window.focus = function() {};
+     window.blur = function() {};
+     window.scrollTo = function() {};

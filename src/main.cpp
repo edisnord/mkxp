@@ -31,6 +31,7 @@
 #include <string.h>
 #include <assert.h>
 #include <string>
+#include <vector>
 
 #include "sharedstate.h"
 #include "eventthread.h"
@@ -181,6 +182,35 @@ int rgssThreadFun(void *userdata)
 
 	return 0;
 }
+
+#ifdef MKXP_WITH_OUTSIDER
+/* Outsider, the RPG Maker MV/MZ runtime linked into the PS5 native title
+ * (see ps5/outsider) */
+extern "C" int outsider_main(int argc, char *argv[]);
+
+static int runOutsider(const char *argv0, const std::string &gameDir,
+                       const std::string &launcherDir)
+{
+	/* Its JavaScript shims ship next to mkxp */
+	std::string shimDir = launcherDir + "/outsider/shims";
+
+	std::vector<std::string> args;
+	args.push_back(argv0);
+	args.push_back("--game");
+	args.push_back(gameDir);
+	args.push_back("--shims");
+	args.push_back(shimDir);
+
+	std::vector<char*> argv;
+	for (size_t i = 0; i < args.size(); ++i)
+		argv.push_back(&args[i][0]);
+	argv.push_back(0);
+
+	Debug() << "Starting Outsider for" << gameDir;
+
+	return outsider_main((int) args.size(), &argv[0]);
+}
+#endif
 
 static void printRgssVersion(int ver)
 {
@@ -390,6 +420,21 @@ int main(int argc, char *argv[])
 			/* Hand the context over to the RGSS thread */
 			SDL_GL_MakeCurrent(win, 0);
 		}
+
+#ifdef MKXP_WITH_OUTSIDER
+		if (!gameDir.empty() && Launcher::isScriptGame(gameDir))
+		{
+			/* Outsider sets up SDL, its window and its context itself */
+			SDL_GL_DeleteContext(launcherCtx);
+			SDL_DestroyWindow(win);
+			Sound_Quit();
+			TTF_Quit();
+			IMG_Quit();
+			SDL_Quit();
+
+			return runOutsider(argv[0], gameDir, launcherDir);
+		}
+#endif
 
 		if (gameDir.empty() || chdir(gameDir.c_str()) != 0)
 		{

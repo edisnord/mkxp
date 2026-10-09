@@ -40,6 +40,10 @@ namespace Launcher
 	 * empty string if the user quit. */
 	std::string run(SDL_Window *win, const Config &conf);
 
+	/* Whether 'gameDir' (as returned by run()) is an RPG Maker MV/MZ
+	 * game, which runs on Outsider instead of mkxp's engine */
+	bool isScriptGame(const std::string &gameDir);
+
 	/* Where save files go for a game launched from 'gameDir':
 	 * the game folder itself when it's writable, or a per-game
 	 * folder in writable storage otherwise */

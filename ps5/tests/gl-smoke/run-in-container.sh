@@ -2,7 +2,8 @@
 # Builds mkxp for Linux against Ubuntu's libraries and runs the smoke test
 # game with Mesa's llvmpipe under Xvfb, once with a compatibility context
 # and once with the OpenGL 3.3 core context the PS5 native title uses.
-# Then checks the game launcher with the core profile build.
+# Then checks the game launcher with the core profile build, which has the
+# RPG Maker MV/MZ runtime (Outsider) linked in, and an MV game on it.
 # Runs inside ubuntu:24.04 with the repository mounted read-only at /src.
 # Screenshots of the launcher end up in ${SHOTS:-/tmp/shots}.
 
@@ -28,6 +29,13 @@ git clone -q https://github.com/Ancurio/SDL_sound.git /tmp/SDL_sound
 )
 ldconfig
 
+# Outsider, as linked into the PS5 native title, and the MV corescript
+# (MIT licensed) for the MV test game
+bash /src/ps5/outsider/build-outsider.sh host /tmp/outsider > /tmp/outsider.log 2>&1 \
+    || { tail -30 /tmp/outsider.log; exit 1; }
+git clone -q https://github.com/rpgtkoolmv/corescript.git /tmp/corescript
+git -C /tmp/corescript -c advice.detachedHead=false checkout -q 182e31449707ba7e406db0485c44c2a9d11e2dcd
+
 test_dir=/src/ps5/tests/gl-smoke
 game=/tmp/game
 mkdir -p "${game}/Data"
@@ -46,7 +54,10 @@ for profile in compat core; do
             /tmp/mkxp/src/main.cpp
         grep -q SDL_GL_CONTEXT_PROFILE_CORE /tmp/mkxp/src/main.cpp
     fi
-    cmake -S /tmp/mkxp -B /tmp/mkxp/build -DMRIVERSION=3.2 -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1
+    outsider=()
+    [ "${profile}" = core ] && outsider=(-DOUTSIDER_OBJECT=/tmp/outsider/outsider.o)
+    cmake -S /tmp/mkxp -B /tmp/mkxp/build -DMRIVERSION=3.2 -DCMAKE_BUILD_TYPE=Release \
+          "${outsider[@]}" > /dev/null 2>&1
     cmake --build /tmp/mkxp/build -j"$(nproc)" > /tmp/build.log 2>&1 \
         || { tail -30 /tmp/build.log; exit 1; }
 
@@ -73,5 +84,9 @@ done
 echo "==> launcher (core profile)"
 bash "${test_dir}/launcher-test.sh" /tmp/mkxp/build/mkxp.bin.x86_64 "${test_dir}" \
      "${SHOTS:-/tmp/shots}" || status=1
+
+echo "==> RPG Maker MV game on Outsider (core profile)"
+bash /src/ps5/tests/mv-smoke/mv-launcher-test.sh /tmp/mkxp/build/mkxp.bin.x86_64 \
+     /tmp/outsider/shims /tmp/corescript "${SHOTS:-/tmp/shots}" || status=1
 
 exit "${status}"

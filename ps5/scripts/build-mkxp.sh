@@ -50,13 +50,26 @@ build_payload() {
 build_native() {
     local build="${SRC}/ps5/build/native"
     local native="${SRC}/ps5/native"
+    local outsider="${PS5_NATIVE}/outsider"
+    local outsider_args=()
+
+    # The RPG Maker MV/MZ runtime, if the image has it (WITH_OUTSIDER)
+    if [ -f "${outsider}/outsider.o" ]; then
+        outsider_args=(-DOUTSIDER_OBJECT="${outsider}/outsider.o")
+        export MKXP_OUTSIDER_SHIMS="${outsider}/shims"
+    else
+        echo "note: image built without Outsider (WITH_OUTSIDER=0);" \
+             "the native title won't run RPG Maker MV/MZ games" >&2
+        outsider_args=(-DOUTSIDER_OBJECT=)
+        unset MKXP_OUTSIDER_SHIMS
+    fi
 
     # SDL2 resolves to the ps5-opengl build; the link step produces a
     # title folder instead of an ELF (see native/native-link.sh)
     ${CMAKE} -S "${SRC}" -B "${build}" \
              -DCMAKE_BUILD_TYPE=Release \
              -DCMAKE_VERBOSE_MAKEFILE=OFF \
-             -DBINDING=MRI -DMRIVERSION=3.1 -DPS5_NATIVE=ON \
+             -DBINDING=MRI -DMRIVERSION=3.1 -DPS5_NATIVE=ON "${outsider_args[@]}" \
              -DPKG_CONFIG_EXECUTABLE="${native}/native-pkg-config" \
              -DCMAKE_CXX_LINK_EXECUTABLE="${native}/native-link.sh <OBJECTS> -o <TARGET> <LINK_LIBRARIES>"
     mkdir -p "${OUT}"

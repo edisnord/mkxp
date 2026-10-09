@@ -84,4 +84,13 @@ RUN if [ "${WITH_NATIVE}" = 1 ]; then \
         && /home/builder/native/setup-native.sh; \
     fi
 
+# RPG Maker MV/MZ runtime (Outsider), linked into the native title. Pass
+# --build-arg WITH_OUTSIDER=0 to leave it out.
+ARG WITH_OUTSIDER=1
+COPY --chown=builder:builder native/native-pkg-config /home/builder/native/
+COPY --chown=builder:builder outsider /home/builder/outsider
+RUN if [ "${WITH_NATIVE}" = 1 ] && [ "${WITH_OUTSIDER}" = 1 ]; then \
+        /home/builder/outsider/build-outsider.sh ps5 ${PS5_NATIVE}/outsider; \
+    fi
+
 WORKDIR /src

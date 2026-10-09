@@ -5,6 +5,7 @@ Project(mkxp)
 
 option(SHARED_FLUID "Dynamically link fluidsynth at build time" OFF)
 option(PS5_NATIVE "Build as a PS5 native title using ps5-opengl (see ps5/README.md)" OFF)
+set(OUTSIDER_OBJECT "" CACHE FILEPATH "Outsider (RPG Maker MV/MZ runtime) to link in, from ps5/outsider/build-outsider.sh")
 option(WORKDIR_CURRENT "Keep current directory on startup" OFF)
 option(FORCE32 "Force 32bit compile on 64bit OS" OFF)
 set(BINDING "MRI" CACHE STRING "The Binding Type (MRI, MRUBY, NULL)")
@@ -29,6 +30,12 @@ ENDIF()
 IF(PS5_NATIVE)
 	list(APPEND DEFINES
 		MKXP_PS5_NATIVE
+	)
+ENDIF()
+
+IF(OUTSIDER_OBJECT)
+	list(APPEND DEFINES
+		MKXP_WITH_OUTSIDER
 	)
 ENDIF()
 
@@ -460,5 +467,10 @@ target_link_libraries(${PROJECT_NAME}
 
 	${PLATFORM_LIBRARIES}
 )
+
+if(OUTSIDER_OBJECT)
+	# Outsider needs SDL2, libm and threads, which mkxp links already
+	target_sources(${PROJECT_NAME} PRIVATE ${OUTSIDER_OBJECT})
+endif()
 
 PostBuildMacBundle(${PROJECT_NAME} "" "${PLATFORM_COPY_LIBS}")

@@ -15,6 +15,8 @@
 #   NATIVE_OUT          where to put the title folder (default: next to target)
 #   MKXP_TITLE_ID       PPSAnnnnn title ID (default PPSA77001)
 #   MKXP_TITLE_NAME     title name shown on the home screen (default mkxp)
+#   MKXP_OUTSIDER_SHIMS Outsider's JavaScript shims, copied into the title as
+#                       outsider/shims when Outsider is linked in
 
 set -euo pipefail
 
@@ -167,5 +169,9 @@ builtins="$(clang-18 --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64
 rm -rf "${NATIVE_OUT}/${MKXP_TITLE_ID}"
 mkdir -p "${NATIVE_OUT}"
 cp -a "${app}/dist/${MKXP_TITLE_ID}" "${NATIVE_OUT}/"
+if [ -n "${MKXP_OUTSIDER_SHIMS:-}" ]; then
+    mkdir -p "${NATIVE_OUT}/${MKXP_TITLE_ID}/outsider"
+    cp -r "${MKXP_OUTSIDER_SHIMS}" "${NATIVE_OUT}/${MKXP_TITLE_ID}/outsider/shims"
+fi
 cp "${app}/build/eboot.elf" "${target}"
 echo "Native title folder: ${NATIVE_OUT}/${MKXP_TITLE_ID}"

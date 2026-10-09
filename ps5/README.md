@@ -14,6 +14,7 @@ There are two ways to run mkxp on the console. The build produces both:
 | Rendering | Software OpenGL (Mesa llvmpipe through OSMesa) | **GPU** OpenGL through [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) (Mesa on the PS5's AGC driver) |
 | Launch | Send to an ELF loader such as [elfldr](https://github.com/ps5-payload-dev/elfldr) | Install the folder as a title, e.g. with [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) and start it from the home screen |
 | Choosing a game | `gameFolder=` in `mkxp.conf` | Built-in game launcher: copy game folders to `/data/mkxp/games/` (or a USB drive) and pick one with the controller |
+| Games | RPG Maker XP, VX, VX Ace | RPG Maker XP, VX, VX Ace, and **MV and MZ** through [Outsider](#rpg-maker-mv-and-mz-games) |
 
 ## Quick start
 
@@ -34,7 +35,7 @@ Output in `ps5/out/`:
 |------|---------|
 | `mkxp.elf` | The payload (statically links everything except PS5 system libraries) |
 | `libOSMesa.so.8` | Software OpenGL for the payload, loaded at runtime |
-| `PPSA77001/` | The native title folder: `eboot.bin`, `sce_module/libc.prx`, `sce_sys/` |
+| `PPSA77001/` | The native title folder: `eboot.bin`, `sce_module/libc.prx`, `sce_sys/`, `outsider/shims/` |
 | `mkxp.conf.sample` | Configuration template |
 
 Any arguments to `build.sh` are passed to `docker build`. The script then runs
@@ -50,7 +51,7 @@ Environment variables for `build.sh`:
 
 ## What gets built
 
-`Dockerfile` has four expensive layers. Each one is cached on its own:
+`Dockerfile` has five expensive layers. Each one is cached on its own:
 
 1. **SDK and libraries from [pacbrew-repo](https://github.com/ps5-payload-dev/pacbrew-repo)**
    (`scripts/build-pacbrew.sh`, using upstream's PKGBUILDs through `makepkg`):
@@ -81,6 +82,17 @@ Environment variables for `build.sh`:
    | [ps5-native-app-boilerplate](https://github.com/blackbearreloaded/ps5-native-app-boilerplate) | `4f531c4`, the revision ps5-opengl 1.0.1 pins | FSELF converter and signer, startup code, and the clean-room `libc.prx` loader module (verified against its published hash) |
    | SDL2 with ps5-opengl's EGL video driver | ps5-payload-dev/SDL `8c56053`, as ps5-opengl's `integration/SDL2` builds it | With two changes: SDL audio stays enabled (upstream's bridge turns it off; mkxp's OpenAL plays through it), and `native/sdl-g19-render-thread.patch` lets the GL context live on mkxp's render thread |
 
+5. **RPG Maker MV/MZ runtime** (`outsider/build-outsider.sh`), for the native title only. See
+   [RPG Maker MV and MZ games](#rpg-maker-mv-and-mz-games):
+
+   | Component | Version | Notes |
+   |-----------|---------|-------|
+   | [Outsider](https://github.com/General-Arcade/outsider) | `f789f46` | GPL-3.0-or-later (or commercial) |
+   | [Tsukuru Player](https://github.com/tragicdiscordly-spec/tsukuru-player)'s PS5 port of it | `9cdcf19`, `patches/outsider/0001-ps5-port.patch` (sha256-pinned) | SDL2 platform layer, DualSense touchpad as mouse, MV compatibility shims. GPL-3.0-or-later |
+   | `outsider/outsider-mkxp.patch` | in-tree | GPU OpenGL through ps5-opengl, `outsider_main()` in place of `main()`, `window.close()` quits like NW.js |
+   | QuickJS-NG | `2f0aa72` (v0.17.0+3), the revision Tsukuru Player uses | |
+   | SoLoud | `e82fd32` | |
+
 Pinned upstream revisions, set as `ARG`s in the `Dockerfile`:
 
 | ARG | Repository |
@@ -90,7 +102,7 @@ Pinned upstream revisions, set as `ARG`s in the `Dockerfile`:
 | `PS5_SDL_COMMIT` | ps5-payload-dev/SDL (the payload's SDL) |
 
 The native toolchain's revisions are pinned at the top of
-`native/setup-native.sh`. Tarballs are verified by sha256 (in the PKGBUILDs,
+`native/setup-native.sh`, Outsider's at the top of `outsider/build-outsider.sh`. Tarballs are verified by sha256 (in the PKGBUILDs,
 `build-deps.sh` or `setup-native.sh`). Git checkouts and archives are verified
 by commit hash.
 
@@ -101,6 +113,7 @@ by commit hash.
 | `MAKEFLAGS` | `-j4` | Parallelism for the toolchain build |
 | `WITH_MESA` | `1` | `0` skips LLVM and Mesa, which saves most of the build time. The payload then needs a `libOSMesa.so.8` from another source on the console. The native title doesn't need it |
 | `WITH_NATIVE` | `1` | `0` skips the native title toolchain |
+| `WITH_OUTSIDER` | `1` | `0` builds the native title without the RPG Maker MV/MZ runtime |
 | `BASE_IMAGE` | `ubuntu:24.04` | Override this to use a derived image, e.g. one that trusts a corporate proxy CA |
 | `PS5_*_COMMIT` | see above | Bump these deliberately to update the toolchain |
 
@@ -159,8 +172,17 @@ transition paths, reads the frame back and compares pixels against
 A third run checks the game launcher on the core profile build
 (`tests/gl-smoke/launcher-test.sh`). It puts three copies of the test game in
 a library, presses Down and Enter with `xdotool`, and checks that the second
-game ran from its own folder. To keep the launcher's screenshots, mount a
-directory at `/tmp/shots`:
+game ran from its own folder.
+
+The core profile build has Outsider linked in, built by the same
+`outsider/build-outsider.sh` as for the console (with the host's SDL2). A
+fourth run (`tests/mv-smoke/`) generates an RPG Maker MV game from the MV
+engine scripts, which KADOKAWA published under the MIT license
+([rpgtkoolmv/corescript](https://github.com/rpgtkoolmv/corescript)), and a
+test plugin. It packages the game NW.js style in `www/`, starts it from the
+launcher, and checks the game's bitmaps and a screenshot of what Outsider drew.
+
+To keep the screenshots, mount a directory at `/tmp/shots`:
 
 ```console
 $ ./ps5/tests/gl-smoke.sh -v "$PWD/shots:/tmp/shots"
@@ -173,6 +195,12 @@ PASS
 ==> launcher (core profile)
 Launcher: found 3 games
 GL Version   : 4.5 (Core Profile) Mesa 25.2.8
+PASS
+==> RPG Maker MV game on Outsider (core profile)
+Launcher: found 1 games
+Starting Outsider for /tmp/mv-lib/MV Smoke/www
+script_loader: RPG Maker MV game
+[GL] Version: 4.5 (Core Profile) Mesa 25.2.8
 PASS
 ```
 
@@ -226,7 +254,8 @@ needed.
 
    For example `/data/mkxp/games/MyGame/Game.ini`. A folder that holds just one
    subfolder with the game (`MyGame/MyGame/Game.ini`, as archives often
-   extract) is found as well.
+   extract) is found as well. RPG Maker MV and MZ games go in the same
+   places (see [below](#rpg-maker-mv-and-mz-games)).
 3. Start **mkxp** from the home screen. The launcher lists every game it
    found, sorted by title, with the RPG Maker version and the game's title
    screen as a preview:
@@ -271,6 +300,48 @@ tiles, build one title per game with its own `MKXP_TITLE_ID` and
 The launcher also works in other builds, payload and desktop included, when
 `mkxp.conf` sets `gameLibrary=` and the working directory holds no game.
 
+## RPG Maker MV and MZ games
+
+MV and MZ games aren't RGSS games: they are JavaScript and HTML5, made for a
+browser engine (NW.js). The native title runs them with
+[Outsider](https://github.com/General-Arcade/outsider), a native MV/MZ
+runtime: the game's own JavaScript runs in QuickJS-NG, with stand-ins for the
+browser and Node.js APIs it uses (DOM, canvas, PIXI, Web Audio, `fs`, …), and
+rendering goes through OpenGL. The PS5 port of Outsider comes from
+[Tsukuru Player](https://github.com/tragicdiscordly-spec/tsukuru-player),
+which runs it as a payload on Mesa's software renderer. Here it is linked into
+the native title, so it draws on the GPU through ps5-opengl like mkxp does.
+
+Copy MV and MZ games into the same game libraries. The launcher recognizes a
+game folder with `js/main.js` and `js/rpg_core.js` (MV) or `js/rmmz_core.js`
+(MZ), or one with a `www/` folder holding those, as games packaged with NW.js
+have. A Steam copy's folder can be copied as it is. The launcher takes the
+title from `data/System.json` and the preview from `img/titles1/` (unless the
+game's pictures are encrypted). Choosing such a game hands the console over to
+Outsider: mkxp's launcher closes its window and calls `outsider_main()` with
+the game's folder and the shims in `PPSA77001/outsider/shims/`.
+
+- **Saves** go where the game puts them, normally `www/save/` in the game's
+  folder. Keep MV/MZ games on `/data` or a USB drive. Games in the read-only
+  title folder can't save.
+- **Log:** Outsider writes `debug.log` into the game's folder. Its other
+  output (script errors, crash reports) goes to mkxp's log,
+  `/download0/mkxp.log`.
+- **Controls:** the DualSense works like a gamepad in NW.js. The touchpad
+  moves a pointer, and a tap clicks (two fingers: right click, which cancels in
+  MV/MZ).
+- **Quitting** the game (e.g. "Quit Game" on the title screen) closes the
+  title, as with RGSS games.
+- **Audio and video:** Ogg and WAV play. M4A audio has to be converted to Ogg
+  and movies to MPEG-1 first, as Outsider's own releases require. Tsukuru
+  Player's README describes how.
+- **Compatibility:** Outsider's MV support, and the plugin workarounds in
+  Tsukuru Player's port, decide which games work. Tsukuru Player reports that
+  most games it tried play. Its patch mentions Fear & Hunger 2 among the games
+  it fixed, and that work is included here. Games that need Steam, other
+  Windows programs, or the internet, or that protect their files in their own
+  way, may not work.
+
 ## Display and controls
 
 The window always covers the whole 1920×1080 display. The payload's video
@@ -310,6 +381,12 @@ in a USB keyboard and use mkxp's F1 menu:
   Liberation Sans, and shows it as one textured quad, so it needs nothing from
   the engine's renderer. `Config::read` can layer several `mkxp.conf` files,
   with a new `gameLibrary` setting and an internal `saveFolder`.
+- Outsider (`CMakeLists.txt` option `OUTSIDER_OBJECT`, `src/main.cpp`,
+  `src/launcher.cpp`): when linked in, the launcher lists MV/MZ games and
+  hands them to `outsider_main()`. `outsider/build-outsider.sh` builds
+  Outsider, SoLoud and QuickJS-NG into one relocatable object that defines
+  nothing but `outsider_main()`. Everything else is made local, so none of their
+  symbols can clash with mkxp's libraries.
 - Fixes that help any modern toolchain:
   - `binding-mri.cpp`: since Ruby 2.7, parts of the core library
     (`Kernel#class`, `Marshal.load`, …) are Ruby code that is only loaded
@@ -346,6 +423,23 @@ in a USB keyboard and use mkxp's F1 menu:
   expect it to be slower than on a PC.
 - No MIDI: mkxp would `dlopen()` fluidsynth, and no PS5 build of it is
   bundled. No MP3: SDL_sound is built without mpg123.
+- Outsider in the native title is new territory on top of that:
+  - It has been built, linked, and tested on Linux with Mesa, but not run on a console.
+  - It hands over from mkxp by shutting SDL down and letting Outsider start it
+    again on its own thread, with a 128 MB stack.
+  - ps5-opengl's SDL driver asks for a 3.3 core context. Outsider needs
+    OpenGL 4.5. Mesa returns its newest core version for such a request, as it
+    does on llvmpipe in the tests, and ps5-opengl implements 4.6. Neither
+    has been checked on the PS5.
+  - It shares the 1 GiB allocator budget (see
+    [How the native title is built](#how-the-native-title-is-built)). Big MV
+    games may need more. Raise `ps5_opengl_heap_size` in
+    `native/mkxp_native.c` if a game runs out.
+- Tsukuru Player notes that on firmware 13.60, programs started through
+  websrv can't open relative paths. Native titles start differently, and
+  mkxp, which uses relative paths after `chdir()`, hasn't been tried on a
+  console. If the log shows files not being found, this is the first thing to
+  check. Tsukuru Player's `shim/ps5path.c` works around it.
 - The launcher shows titles in Liberation Sans, which has no CJK glyphs.
   Japanese titles in UTF-8 show as boxes. Titles that aren't UTF-8 (e.g.
   Shift-JIS) fall back to the folder name.

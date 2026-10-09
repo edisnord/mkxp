@@ -34,8 +34,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <stdlib.h>
+
 #include <algorithm>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <vector>
 
@@ -49,8 +52,13 @@ struct Game
 {
 	std::string path;
 	std::string title;
-	int rgssVersion;
+	/* RGSS version, or one of the values below */
+	int version;
 };
+
+/* RPG Maker MV and MZ games, run by Outsider (see main.cpp) */
+const int versionMV = 4;
+const int versionMZ = 5;
 
 struct Color
 {
@@ -183,16 +191,132 @@ bool gameLess(const Game &a, const Game &b)
 	return cmp != 0 ? cmp < 0 : a.path < b.path;
 }
 
-const char *makerName(int rgssVersion)
+const char *makerName(int version)
 {
-	switch (rgssVersion)
+	switch (version)
 	{
 	case 1: return "RPG Maker XP";
 	case 2: return "RPG Maker VX";
 	case 3: return "RPG Maker VX Ace";
+	case versionMV: return "RPG Maker MV";
+	case versionMZ: return "RPG Maker MZ";
 	}
 
 	return "RPG Maker";
+}
+
+/* The folder of the RPG Maker MV/MZ game in 'dir' (the one with js/main.js:
+ * 'dir' itself, or www/ in games packaged with NW.js), or an empty string */
+std::string scriptGameRoot(const std::string &dir, int *version)
+{
+	const char *roots[] = { "", "www" };
+
+	for (size_t i = 0; i < 2; ++i)
+	{
+		std::string root = roots[i][0] ? joinPath(dir, roots[i]) : dir;
+
+		if (!isFile(joinPath(root, "js/main.js")))
+			continue;
+
+		if (isFile(joinPath(root, "js/rmmz_core.js")))
+		{
+			*version = versionMZ;
+			return root;
+		}
+
+		if (isFile(joinPath(root, "js/rpg_core.js")))
+		{
+			*version = versionMV;
+			return root;
+		}
+	}
+
+	return std::string();
+}
+
+void appendUtf8(std::string &out, unsigned long c)
+{
+	if (c < 0x80)
+	{
+		out += (char) c;
+	}
+	else if (c < 0x800)
+	{
+		out += (char) (0xC0 | (c >> 6));
+		out += (char) (0x80 | (c & 0x3F));
+	}
+	else if (c < 0x10000)
+	{
+		out += (char) (0xE0 | (c >> 12));
+		out += (char) (0x80 | ((c >> 6) & 0x3F));
+		out += (char) (0x80 | (c & 0x3F));
+	}
+	else
+	{
+		out += (char) (0xF0 | (c >> 18));
+		out += (char) (0x80 | ((c >> 12) & 0x3F));
+		out += (char) (0x80 | ((c >> 6) & 0x3F));
+		out += (char) (0x80 | (c & 0x3F));
+	}
+}
+
+/* The string value of the first "key" in a JSON file, or an empty string */
+std::string jsonString(const std::string &file, const std::string &key)
+{
+	std::ifstream in(file.c_str(), std::ios::binary);
+	std::string json((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+	size_t pos = json.find("\"" + key + "\"");
+	if (pos == std::string::npos)
+		return std::string();
+
+	pos = json.find_first_not_of(" \t\r\n", pos + key.size() + 2);
+	if (pos == std::string::npos || json[pos] != ':')
+		return std::string();
+
+	pos = json.find_first_not_of(" \t\r\n", pos + 1);
+	if (pos == std::string::npos || json[pos] != '"')
+		return std::string();
+
+	std::string out;
+
+	for (++pos; pos < json.size() && json[pos] != '"'; ++pos)
+	{
+		if (json[pos] != '\\')
+		{
+			out += json[pos];
+			continue;
+		}
+
+		if (++pos >= json.size())
+			break;
+
+		switch (json[pos])
+		{
+		case 'n': out += '\n'; break;
+		case 't': out += '\t'; break;
+		case 'r': case 'b': case 'f': break;
+		case 'u':
+		{
+			unsigned long c = strtoul(json.substr(pos + 1, 4).c_str(), 0, 16);
+			pos += 4;
+
+			/* UTF-16 surrogate pair */
+			if (c >= 0xD800 && c < 0xDC00 && json.compare(pos + 1, 2, "\\u") == 0)
+			{
+				unsigned long low = strtoul(json.substr(pos + 3, 4).c_str(), 0, 16);
+				c = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
+				pos += 6;
+			}
+
+			appendUtf8(out, c);
+			break;
+		}
+		default: out += json[pos];
+		}
+	}
+
+	return out;
 }
 
 class Picker
@@ -377,12 +501,43 @@ private:
 		return isFile(joinPath(dir, iniName));
 	}
 
+	/* Adds the game in 'dir', if there is one */
+	bool tryAddGame(const std::string &dir)
+	{
+		if (hasGame(dir))
+		{
+			addGame(dir);
+			return true;
+		}
+
+#ifdef MKXP_WITH_OUTSIDER
+		int version = 0;
+		std::string root = scriptGameRoot(dir, &version);
+
+		if (!root.empty())
+		{
+			Game game;
+			game.path = root;
+			game.version = version;
+			game.title = jsonString(joinPath(root, "data/System.json"), "gameTitle");
+
+			if (game.title.empty())
+				game.title = baseName(dir);
+
+			games.push_back(game);
+			return true;
+		}
+#endif
+
+		return false;
+	}
+
 	void addGame(const std::string &dir)
 	{
 		Game game;
 		game.path = dir;
 		game.title = baseName(dir);
-		game.rgssVersion = 0;
+		game.version = 0;
 
 		/* Reuse mkxp's own Game.ini parsing and RGSS version detection */
 		char cwd[PATH_MAX];
@@ -397,7 +552,7 @@ private:
 			gameConf.readGameINI();
 
 			game.title = gameConf.game.title;
-			game.rgssVersion = gameConf.rgssVersion;
+			game.version = gameConf.rgssVersion;
 
 			if (chdir(cwd) != 0)
 				Debug() << "Launcher: unable to switch back into" << cwd;
@@ -418,16 +573,13 @@ private:
 			{
 				std::string dir = joinPath(libraries[i], entries[j]);
 
-				if (hasGame(dir))
-				{
-					addGame(dir);
+				if (tryAddGame(dir))
 					continue;
-				}
 
 				/* Archives often extract to "Name/Name/Game.ini" */
 				std::vector<std::string> sub = listDir(dir, true);
-				if (sub.size() == 1 && hasGame(joinPath(dir, sub[0])))
-					addGame(joinPath(dir, sub[0]));
+				if (sub.size() == 1)
+					tryAddGame(joinPath(dir, sub[0]));
 			}
 		}
 
@@ -647,12 +799,13 @@ private:
 		{
 			"Graphics/Titles1", /* VX Ace */
 			"Graphics/Titles",  /* XP */
-			"Graphics/System"   /* VX: Title.png */
+			"Graphics/System",  /* VX: Title.png */
+			"img/titles1"       /* MV, MZ (unless encrypted) */
 		};
 
 		SDL_Surface *result = 0;
 
-		for (size_t i = 0; i < 3 && !result; ++i)
+		for (size_t i = game.version >= versionMV ? 3 : 0; i < 4 && !result; ++i)
 		{
 			std::string dir = joinPath(game.path, dirs[i]);
 			std::vector<std::string> files = listDir(dir, false);
@@ -701,8 +854,14 @@ private:
 
 		text(fontMedium, "No games found", x, y, colText);
 		y += px(70);
+#ifdef MKXP_WITH_OUTSIDER
+		text(fontSmall, "Copy each game's folder (the one containing " + iniName +
+		     ", or www/ or js/ for MV and MZ games) into one of these folders:",
+		     x, y, colDim, width - 2 * x);
+#else
 		text(fontSmall, "Copy each game's folder (the one containing " + iniName +
 		     ") into one of these folders:", x, y, colDim, width - 2 * x);
+#endif
 		y += px(50);
 
 		for (size_t i = 0; i < libraries.size(); ++i, y += px(40))
@@ -733,7 +892,7 @@ private:
 				fill(x, y, w, h - px(8), colAccent);
 
 			text(fontMedium, game.title, x + pad, y + px(12), colText, w - 2 * pad);
-			text(fontSmall, makerName(game.rgssVersion), x + pad, y + px(56),
+			text(fontSmall, makerName(game.version), x + pad, y + px(56),
 			     i == selected ? colText : colDim, w - 2 * pad);
 		}
 
@@ -1009,6 +1168,13 @@ std::string Launcher::run(SDL_Window *win, const Config &conf)
 	SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYBUTTONUP);
 
 	return path;
+}
+
+bool Launcher::isScriptGame(const std::string &gameDir)
+{
+	int version;
+
+	return scriptGameRoot(gameDir, &version) == gameDir;
 }
 
 std::string Launcher::saveFolder(const std::string &gameDir, const Config &conf)

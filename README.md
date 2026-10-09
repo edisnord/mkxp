@@ -89,7 +89,7 @@ To run mkxp, you should have a graphics card capable of at least **OpenGL (ES) 2
 
 ### PlayStation 5
 
-mkxp can be cross-compiled for the PS5 with the [ps5-payload-dev SDK](https://github.com/ps5-payload-dev/sdk). The build produces both an ELF payload with software rendering and a native title that renders on the GPU through [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl). The native title has a game launcher: copy game folders to the console and pick one with the controller. It uses a Docker-based toolchain: run `./ps5/build.sh`. See [ps5/README.md](ps5/README.md) for details.
+mkxp can be cross-compiled for the PS5 with the [ps5-payload-dev SDK](https://github.com/ps5-payload-dev/sdk). The build produces both an ELF payload with software rendering and a native title that renders on the GPU through [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl). The native title has a game launcher: copy game folders to the console and pick one with the controller. It also runs RPG Maker MV and MZ games, through the [Outsider](https://github.com/General-Arcade/outsider) runtime. It uses a Docker-based toolchain: run `./ps5/build.sh`. See [ps5/README.md](ps5/README.md) for details.
 
 ## Dependency kit
 
