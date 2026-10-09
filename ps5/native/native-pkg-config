@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# prospero-pkg-config, but resolving SDL2 to the ps5-opengl build in
+# /user/native before the regular (OSMesa) one in /user/homebrew.
+
+SYSROOT="${PS5_PAYLOAD_SDK:-/opt/ps5-payload-sdk}/target"
+
+export PKG_CONFIG_DIR=
+export PKG_CONFIG_SYSROOT_DIR="${SYSROOT}"
+export PKG_CONFIG_LIBDIR="${SYSROOT}/user/native/lib/pkgconfig:${SYSROOT}/user/homebrew/lib/pkgconfig:${SYSROOT}/user/homebrew/libdata/pkgconfig"
+export PKG_CONFIG_PATH=
+
+unset DESTDIR
+
+exec pkg-config --static "$@"

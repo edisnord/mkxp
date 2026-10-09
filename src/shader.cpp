@@ -117,9 +117,40 @@ static void setupShaderSource(GLuint shader, GLenum type,
 	static const char glesDefine[] = "#define GLSLES\n";
 	static const char fragDefine[] = "#define FRAGMENT_SHADER\n";
 
-	const GLchar *shaderSrc[4];
-	GLint shaderSrcSize[4];
+	/* The shaders are written in GLSL 1.10 / ES 1.00, which core
+	 * profile contexts don't accept; map them onto GLSL 3.30 */
+	static const char coreVert[] =
+		"#version 330 core\n"
+		"#define attribute in\n"
+		"#define varying out\n";
+	/* The shaders name their sampler uniform 'texture', which hides the
+	 * built-in function of that name; call it before the declaration */
+	static const char coreFrag[] =
+		"#version 330 core\n"
+		"#define varying in\n"
+		"out vec4 mkxp_FragColor;\n"
+		"#define gl_FragColor mkxp_FragColor\n"
+		"vec4 mkxp_texture2D(sampler2D s, vec2 c) { return texture(s, c); }\n"
+		"#define texture2D mkxp_texture2D\n";
+
+	const GLchar *shaderSrc[5];
+	GLint shaderSrcSize[5];
 	size_t i = 0;
+
+	if (gl.glslcore)
+	{
+		if (type == GL_FRAGMENT_SHADER)
+		{
+			shaderSrc[i] = coreFrag;
+			shaderSrcSize[i] = sizeof(coreFrag)-1;
+		}
+		else
+		{
+			shaderSrc[i] = coreVert;
+			shaderSrcSize[i] = sizeof(coreVert)-1;
+		}
+		++i;
+	}
 
 	if (gl.glsles)
 	{

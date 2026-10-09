@@ -70,4 +70,18 @@ COPY --chown=builder:builder compat /home/builder/compat
 # (the sysroot is root-owned after the pacman installs above)
 RUN sudo chown -R builder:builder ${PS5_PAYLOAD_SDK}/target && build-deps.sh
 
+# Native title with GPU OpenGL (ps5-opengl). Pass --build-arg WITH_NATIVE=0
+# to build only the payload.
+ARG WITH_NATIVE=1
+ENV PS5_NATIVE=/opt/ps5-native
+COPY --chown=builder:builder native/setup-native.sh native/sdl-g19-render-thread.patch \
+     /home/builder/native/
+RUN if [ "${WITH_NATIVE}" = 1 ]; then \
+        sudo apt-get update \
+        && sudo apt-get install -y --no-install-recommends libclang-rt-18-dev \
+        && sudo rm -rf /var/lib/apt/lists/* \
+        && sudo install -d -o builder -g builder ${PS5_NATIVE} \
+        && /home/builder/native/setup-native.sh; \
+    fi
+
 WORKDIR /src

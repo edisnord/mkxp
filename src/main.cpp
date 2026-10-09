@@ -79,6 +79,13 @@ int rgssThreadFun(void *userdata)
 	/* Setup GL context */
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
+#ifdef MKXP_PS5_NATIVE
+	/* ps5-opengl's SDL driver provides core profile contexts */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
+
 	if (conf.debugMode)
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
@@ -193,6 +200,11 @@ static void setupWindowIcon(const Config &conf, SDL_Window *win)
 
 int main(int argc, char *argv[])
 {
+#ifdef __PROSPERO__
+	/* SDL's PS5 builds don't use SDL_main */
+	SDL_SetMainReady();
+#endif
+
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
 	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 
@@ -209,7 +221,11 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-#ifndef WORKDIR_CURRENT
+#if defined(MKXP_PS5_NATIVE)
+	/* The title's own (read-only) folder holds mkxp.conf and the game */
+	if (chdir("/app0") != 0)
+		Debug() << "Unable to switch into /app0";
+#elif !defined(WORKDIR_CURRENT)
 	/* set working directory */
 	char *dataDir = SDL_GetBasePath();
 	if (dataDir)

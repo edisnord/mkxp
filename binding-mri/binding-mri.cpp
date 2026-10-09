@@ -583,6 +583,19 @@ static void mriBindingExecute()
 	ruby_sysinit(&argc, &argv);
 
 	ruby_setup();
+
+#if RUBY_API_VERSION_MAJOR > 2 || (RUBY_API_VERSION_MAJOR == 2 && RUBY_API_VERSION_MINOR >= 7)
+	/* Since 2.7, parts of the core library (eg. Kernel#class, Marshal.load)
+	 * are written in Ruby and only loaded during option processing, so
+	 * process the options of an empty script */
+	{
+		static char opt0[] = "mkxp", opt1[] = "--disable-all",
+		            opt2[] = "-e", opt3[] = "";
+		char *opts[] = { opt0, opt1, opt2, opt3 };
+		ruby_options(ARRAY_SIZE(opts), opts);
+	}
+#endif
+
 	rb_enc_set_default_external(rb_enc_from_encoding(rb_utf8_encoding()));
 
 	Config &conf = shState->rtData().config;

@@ -40,6 +40,10 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#ifdef MKXP_PS5_NATIVE
+#include <limits.h>
+#include "debugwriter.h"
+#endif
 #include <string>
 
 SharedState *SharedState::instance = 0;
@@ -127,10 +131,23 @@ struct SharedStatePrivate
 			fclose(tmp);
 		}
 
+#ifdef MKXP_PS5_NATIVE
+		/* The game folder is read-only in a native title: mount it by
+		 * absolute path, so Ruby's file I/O (save files) can be pointed
+		 * at the title's writable download data below */
+		char gameDir[PATH_MAX];
+		fileSystem.addPath(getcwd(gameDir, sizeof(gameDir)) ? gameDir : ".");
+#else
 		fileSystem.addPath(".");
+#endif
 
 		for (size_t i = 0; i < config.rtps.size(); ++i)
 			fileSystem.addPath(config.rtps[i].c_str());
+
+#ifdef MKXP_PS5_NATIVE
+		if (chdir("/download0") != 0)
+			Debug() << "Unable to switch into /download0";
+#endif
 
 		if (config.pathCache)
 			fileSystem.createPathCache();

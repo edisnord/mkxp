@@ -220,6 +220,8 @@ struct GLFunctions
 	GL_GREMEMDY_FUN
 
 	bool glsles;
+	/* Core profile context: shaders are translated to GLSL 3.30 */
+	bool glslcore;
 	bool unpack_subimage;
 	bool npot_repeat;
 

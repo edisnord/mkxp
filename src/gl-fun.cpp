@@ -113,6 +113,10 @@ void initGLFunctions()
 	else
 		parseExtensionsCompat(gl.GetString, ext);
 
+	int profile = 0;
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &profile);
+	gl.glslcore = !gles && glMajor >= 3 && (profile & SDL_GL_CONTEXT_PROFILE_CORE);
+
 #define HAVE_EXT(_ext) ext.contains("GL_" #_ext)
 
 	/* FBO entrypoints */

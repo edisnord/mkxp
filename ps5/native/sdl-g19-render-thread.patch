@@ -1,0 +1,55 @@
+diff --git a/integration/SDL2/SDL_ps5g19.c b/integration/SDL2/SDL_ps5g19.c
+index ad6d482..25d44d6 100644
+--- a/integration/SDL2/SDL_ps5g19.c
++++ b/integration/SDL2/SDL_ps5g19.c
+@@ -27,6 +27,9 @@ static int egl_error(const char *operation)
+     return SDL_SetError("G19 %s: EGL error 0x%04x", operation, eglGetError());
+ }
+ 
++/* mkxp: windows stay on the video thread, but the context is created, made
++ * current, presented and deleted on the application's render thread (EGL
++ * tracks the current context per thread), so only window functions check. */
+ static int on_thread(G19 *g)
+ {
+     return SDL_ThreadID() == g->thread ? 0 :
+@@ -118,7 +121,6 @@ static int make_current(_THIS, SDL_Window *window, SDL_GLContext context)
+ {
+     G19 *g = _this->driverdata;
+     EGLSurface surface = context ? g->surface : EGL_NO_SURFACE;
+-    if (on_thread(g) < 0) return -1;
+     if (context && (context != g->context || window != g->window))
+         return SDL_SetError("G19 context/window mismatch");
+     if (!eglMakeCurrent(g->display, surface, surface, (EGLContext)context))
+@@ -129,7 +131,7 @@ static int make_current(_THIS, SDL_Window *window, SDL_GLContext context)
+ static void delete_context(_THIS, SDL_GLContext context)
+ {
+     G19 *g = _this->driverdata;
+-    if (on_thread(g) < 0 || !context) return;
++    if (!context) return;
+     if (context != g->context) {
+         SDL_SetError("G19 unknown context");
+         return;
+@@ -151,7 +153,6 @@ static SDL_GLContext create_context(_THIS, SDL_Window *window)
+         EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,
+         EGL_NONE
+     };
+-    if (on_thread(g) < 0) return NULL;
+     if (g->context || window != g->window ||
+         _this->gl_config.major_version != 3 || _this->gl_config.minor_version != 3 ||
+         _this->gl_config.profile_mask != SDL_GL_CONTEXT_PROFILE_CORE ||
+@@ -180,7 +181,6 @@ static SDL_GLContext create_context(_THIS, SDL_Window *window)
+ static int set_interval(_THIS, int interval)
+ {
+     G19 *g = _this->driverdata;
+-    if (on_thread(g) < 0) return -1;
+     if (interval != 0 && interval != 1) return SDL_SetError("G19 swap interval must be 0 or 1");
+     if (!eglSwapInterval(g->display, interval)) return egl_error("eglSwapInterval");
+     g->interval = interval;
+@@ -192,7 +192,6 @@ static int get_interval(_THIS) { return ((G19 *)_this->driverdata)->interval; }
+ static int swap_window(_THIS, SDL_Window *window)
+ {
+     G19 *g = _this->driverdata;
+-    if (on_thread(g) < 0) return -1;
+     if (window != g->window) return SDL_SetError("G19 unknown window");
+     return eglSwapBuffers(g->display, g->surface) ? 0 : egl_error("eglSwapBuffers");
+ }

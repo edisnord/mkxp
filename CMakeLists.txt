@@ -4,6 +4,7 @@ Project(mkxp)
 ## Setup options ##
 
 option(SHARED_FLUID "Dynamically link fluidsynth at build time" OFF)
+option(PS5_NATIVE "Build as a PS5 native title using ps5-opengl (see ps5/README.md)" OFF)
 option(WORKDIR_CURRENT "Keep current directory on startup" OFF)
 option(FORCE32 "Force 32bit compile on 64bit OS" OFF)
 set(BINDING "MRI" CACHE STRING "The Binding Type (MRI, MRUBY, NULL)")
@@ -22,6 +23,12 @@ ENDIF()
 IF(WORKDIR_CURRENT)
 	list(APPEND DEFINES
 		WORKDIR_CURRENT
+	)
+ENDIF()
+
+IF(PS5_NATIVE)
+	list(APPEND DEFINES
+		MKXP_PS5_NATIVE
 	)
 ENDIF()
 
@@ -96,9 +103,11 @@ pkg_check_modules(SDL2_IMAGE    REQUIRED SDL2_image)
 pkg_check_modules(SDL_SOUND     REQUIRED SDL_sound)
 
 find_package(Boost 1.49 COMPONENTS program_options REQUIRED)
-if(PS5)
-	# The static OpenAL Soft package links against SDL2's imported target
-	find_package(SDL2 CONFIG REQUIRED)
+if(PS5 AND NOT TARGET SDL2::SDL2-static)
+	# The static OpenAL Soft package links against this SDL2 target. SDL2
+	# itself is linked through pkg-config, which picks the right variant
+	# (OSMesa payload or ps5-opengl native title, see ps5/README.md).
+	add_library(SDL2::SDL2-static INTERFACE IMPORTED)
 endif()
 find_package(OpenAL REQUIRED)
 find_package(ZLIB REQUIRED)
