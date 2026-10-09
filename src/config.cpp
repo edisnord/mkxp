@@ -281,7 +281,7 @@ void Config::read(int argc, char *argv[], const std::vector<std::string> &confFi
 	if (gameLibraries.empty())
 	{
 		const char *defaults[] =
-			{ "/data/mkxp", "/mnt/usb0/mkxp", "/mnt/usb1/mkxp", "/app0/games" };
+			{ "/data/mkxp/games", "/mnt/usb0/mkxp/games", "/mnt/usb1/mkxp/games", "/app0/games" };
 
 		gameLibraries.assign(defaults, defaults + 4);
 	}

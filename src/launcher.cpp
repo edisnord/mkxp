@@ -138,6 +138,19 @@ std::vector<std::string> listDir(const std::string &dir, bool dirs)
 	return result;
 }
 
+/* Creates 'dir' and any missing parents */
+void makeDirs(const std::string &dir)
+{
+	for (size_t pos = 1; pos != std::string::npos; ++pos)
+	{
+		pos = dir.find('/', pos);
+		mkdir(dir.substr(0, pos).c_str(), 0755);
+
+		if (pos == std::string::npos)
+			break;
+	}
+}
+
 bool isWritable(const std::string &dir)
 {
 	/* access() doesn't know about read-only mounts everywhere */
@@ -980,6 +993,14 @@ bool Launcher::wanted(const Config &conf)
 
 std::string Launcher::run(SDL_Window *win, const Config &conf)
 {
+#ifdef MKXP_PS5_NATIVE
+	/* Have the console's internal storage library ready to copy games
+	 * into (USB drives might not be mounted, the title is read-only) */
+	for (size_t i = 0; i < conf.gameLibraries.size(); ++i)
+		if (conf.gameLibraries[i].compare(0, 6, "/data/") == 0)
+			makeDirs(conf.gameLibraries[i]);
+#endif
+
 	Picker picker(win, conf);
 	std::string path = picker.run();
 

@@ -160,8 +160,9 @@
 # set and the working directory contains no Game.ini, mkxp
 # shows a launcher that lists these games to pick from.
 # Can be specified multiple times
-# (default: none; PS5 native title: /data/mkxp,
-#  /mnt/usb0/mkxp, /mnt/usb1/mkxp, /app0/games)
+# (default: none; PS5 native title: /data/mkxp/games,
+#  /mnt/usb0/mkxp/games, /mnt/usb1/mkxp/games, /app0/games,
+#  libraries under /data are created if they don't exist)
 #
 # gameLibrary=/path/to/games
 # gameLibrary=/path/to/more/games

@@ -13,7 +13,7 @@ There are two ways to run mkxp on the console. The build produces both:
 |---|---|---|
 | Rendering | Software OpenGL (Mesa llvmpipe through OSMesa) | **GPU** OpenGL through [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) (Mesa on the PS5's AGC driver) |
 | Launch | Send to an ELF loader such as [elfldr](https://github.com/ps5-payload-dev/elfldr) | Install the folder as a title, e.g. with [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) and start it from the home screen |
-| Choosing a game | `gameFolder=` in `mkxp.conf` | Built-in game launcher: copy game folders to `/data/mkxp/` (or a USB drive) and pick one with the controller |
+| Choosing a game | `gameFolder=` in `mkxp.conf` | Built-in game launcher: copy game folders to `/data/mkxp/games/` (or a USB drive) and pick one with the controller |
 
 ## Quick start
 
@@ -186,7 +186,8 @@ You need a PS5 that runs an ELF loader such as
    ftpsrv. The payload loader also searches the working directory, so a copy
    next to the game works too.
 2. Copy the game (the folder with `Game.ini`), `mkxp.conf` and optionally
-   `mkxp.elf` to the console, e.g. `/data/mkxp/`.
+   `mkxp.elf` to the console, e.g. the game to `/data/mkxp/games/MyGame/` and
+   the rest to `/data/mkxp/`.
 3. mkxp switches to the directory of its own executable before it reads
    `mkxp.conf`. If the loader does not pass a path in `argv[0]` (for example,
    when the ELF is sent straight to port 9021), the PS5 SDL port reports
@@ -194,7 +195,7 @@ You need a PS5 that runs an ELF loader such as
    at the game:
 
    ```ini
-   gameFolder=/data/mkxp/MyGame
+   gameFolder=/data/mkxp/games/MyGame
    ```
 
 4. Send the payload:
@@ -219,11 +220,11 @@ needed.
 
    | Library | |
    |---------|---|
-   | `/data/mkxp/` | Internal storage |
-   | `/mnt/usb0/mkxp/`, `/mnt/usb1/mkxp/` | USB drives |
+   | `/data/mkxp/games/` | Internal storage. The title creates this folder the first time it starts |
+   | `/mnt/usb0/mkxp/games/`, `/mnt/usb1/mkxp/games/` | USB drives |
    | `/app0/games/` | Games bundled inside the title folder (`PPSA77001/games/`) |
 
-   For example `/data/mkxp/MyGame/Game.ini`. A folder that holds just one
+   For example `/data/mkxp/games/MyGame/Game.ini`. A folder that holds just one
    subfolder with the game (`MyGame/MyGame/Game.ini`, as archives often
    extract) is found as well.
 3. Start **mkxp** from the home screen. The launcher lists every game it
@@ -253,7 +254,7 @@ to `/download0/<folder name>/` instead. The log is always
 e.g. `smoothScaling=false` or an `RTP=` path. A `mkxp.conf` in a game's folder
 overrides it for that game. Use absolute paths for `RTP=` and `midi.soundFont`
 in the title's `mkxp.conf`. `gameLibrary=` replaces the list of libraries and
-can be given several times:
+can be given several times. Libraries under `/data` are created if they're missing:
 
 ```ini
 gameLibrary=/data/rpg
