@@ -110,6 +110,13 @@ replace_once "${app}/tools/build.sh" \
 # defines here (libc++abi's __cxa_thread_atexit_impl; the payload loader's
 # __dlopen & co. and kernel_mprotect, used by the SDK's libc.a) to zero, as
 # the converter only accepts imports that system stubs export
+# The SDK's libc.a implements these as raw syscalls, which a title can't
+# execute; mkxp_native.c replaces them (see there)
+raw_syscall_wraps=
+for sym in mmap mprotect ppoll readlink umask chown lchown lchmod \
+           getcwd chdir; do
+    raw_syscall_wraps="${raw_syscall_wraps} --wrap=${sym}"
+done
 weak_null=
 for sym in __cxa_thread_atexit_impl __dladdr __dlclose __dlerror __dlopen \
            __dlsym kernel_mprotect; do
@@ -117,7 +124,7 @@ for sym in __cxa_thread_atexit_impl __dladdr __dlclose __dlerror __dlopen \
 done
 replace_once "${app}/tools/build.sh" \
     '--eh-frame-hdr \' \
-    "--eh-frame-hdr --strip-debug --wrap=malloc --wrap=calloc --wrap=realloc --wrap=free --wrap=posix_memalign --wrap=malloc_usable_size${weak_null} \\"
+    "--eh-frame-hdr --strip-debug --wrap=malloc --wrap=calloc --wrap=realloc --wrap=free --wrap=posix_memalign --wrap=malloc_usable_size${raw_syscall_wraps}${weak_null} \\"
 
 # Title metadata: ps5-opengl's template (it sets the GPU memory budgets)
 python3 - "${GLSRC}/native-app/param.json" "${app}/sce_sys/param.json" \

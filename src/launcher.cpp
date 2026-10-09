@@ -28,6 +28,7 @@
 #include <SDL_ttf.h>
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <strings.h>
@@ -126,15 +127,60 @@ std::vector<std::string> listDir(const std::string &dir, bool dirs)
 	std::vector<std::string> result;
 	DIR *d = opendir(dir.c_str());
 
-	if (!d)
+#ifdef MKXP_PS5_NATIVE
+	if (!d && errno == EPERM)
+	{
+		/* The title sandbox refuses to open /app0 and /data paths with
+		 * O_DIRECTORY (what opendir() does first), even though a plain
+		 * file open, stat(), mkdir() or chmod() on the exact same path
+		 * is allowed. Since this title can't enumerate those folders
+		 * itself, fall back to a plain-text manifest next to them
+		 * ("<dir>.txt", one name per line, '#' comments), maintained
+		 * by hand or by whatever copies games in. */
+		std::ifstream manifest((dir + ".txt").c_str());
+		std::string name;
+
+		while (std::getline(manifest, name))
+		{
+			while (!name.empty() && (name[name.size()-1] == '\r' || name[name.size()-1] == '\n'))
+				name.resize(name.size() - 1);
+
+			if (name.empty() || name[0] == '#')
+				continue;
+
+			std::string path = joinPath(dir, name);
+			bool match = dirs ? isDir(path) : isFile(path);
+
+			Debug() << "Launcher: manifest entry" << path << "match" << match;
+
+			if (match)
+				result.push_back(name);
+		}
+
+		std::sort(result.begin(), result.end());
+
 		return result;
+	}
+#endif
+
+	if (!d)
+	{
+		Debug() << "Launcher: opendir" << dir << "failed, errno" << errno;
+		return result;
+	}
 
 	while (struct dirent *e = readdir(d))
 	{
+		std::string path = joinPath(dir, e->d_name);
+		struct stat st;
+		int rc = stat(path.c_str(), &st);
+
+		Debug() << "Launcher: entry" << path << "d_type" << (int) e->d_type
+		        << "stat" << rc << "errno" << (rc ? errno : 0)
+		        << "mode" << (rc ? 0 : (int) st.st_mode);
+
 		if (e->d_name[0] == '.')
 			continue;
-
-		std::string path = joinPath(dir, e->d_name);
 
 		if (dirs ? isDir(path) : isFile(path))
 			result.push_back(e->d_name);
@@ -146,13 +192,18 @@ std::vector<std::string> listDir(const std::string &dir, bool dirs)
 	return result;
 }
 
-/* Creates 'dir' and any missing parents */
+/* Creates 'dir' and any missing parents, open to everyone so that games
+ * can be copied in over FTP (which doesn't run as the title's user) */
 void makeDirs(const std::string &dir)
 {
 	for (size_t pos = 1; pos != std::string::npos; ++pos)
 	{
 		pos = dir.find('/', pos);
-		mkdir(dir.substr(0, pos).c_str(), 0755);
+		std::string part = dir.substr(0, pos);
+
+		/* chmod too: the umask would take the write bits away */
+		if (mkdir(part.c_str(), 0777) == 0)
+			chmod(part.c_str(), 0777);
 
 		if (pos == std::string::npos)
 			break;
@@ -569,12 +620,17 @@ private:
 		{
 			std::vector<std::string> entries = listDir(libraries[i], true);
 
+			Debug() << "Launcher: library" << libraries[i] << "has"
+			        << entries.size() << "folders";
+
 			for (size_t j = 0; j < entries.size(); ++j)
 			{
 				std::string dir = joinPath(libraries[i], entries[j]);
 
 				if (tryAddGame(dir))
 					continue;
+
+				Debug() << "Launcher: no game in" << dir;
 
 				/* Archives often extract to "Name/Name/Game.ini" */
 				std::vector<std::string> sub = listDir(dir, true);

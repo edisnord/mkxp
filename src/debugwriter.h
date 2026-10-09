@@ -30,6 +30,11 @@
 #include <android/log.h>
 #endif
 
+#ifdef MKXP_PS5_NATIVE
+#include <cstdio>
+extern "C" void mkxp_udp_log(const char *msg);
+#endif
+
 
 /* A cheap replacement for qDebug() */
 
@@ -63,6 +68,11 @@ public:
 	{
 #ifdef __ANDROID__
 		__android_log_write(ANDROID_LOG_DEBUG, "mkxp", buf.str().c_str());
+#elif defined(MKXP_PS5_NATIVE)
+		/* Over UDP to the dev workstation (mkxp_native.c); a file
+		 * written by this title and read back over FTP has proven
+		 * unreliable for catching every line */
+		mkxp_udp_log(buf.str().c_str());
 #else
 		std::cerr << buf.str() << std::endl;
 #endif
