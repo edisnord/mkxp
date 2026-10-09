@@ -40,8 +40,11 @@
 
 #include <string.h>
 
+/* Newer OpenAL Soft headers declare these themselves */
+#ifndef ALC_SOFT_pause_device
 typedef void (ALC_APIENTRY *LPALCDEVICEPAUSESOFT) (ALCdevice *device);
 typedef void (ALC_APIENTRY *LPALCDEVICERESUMESOFT) (ALCdevice *device);
+#endif
 
 #define AL_DEVICE_PAUSE_FUN \
 	AL_FUN(DevicePause, LPALCDEVICEPAUSESOFT) \

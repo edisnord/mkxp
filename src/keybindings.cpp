@@ -103,6 +103,18 @@ static elementsN(defaultKbBindings2);
 
 static const JsBindingData defaultJsBindings[] =
 {
+#ifdef __PROSPERO__
+	/* DualSense, button order as reported by the PS5 SDL port */
+	{ 0,  Input::C }, /* Cross */
+	{ 1,  Input::B }, /* Circle */
+	{ 2,  Input::A }, /* Square */
+	{ 3,  Input::X }, /* Triangle */
+	{ 6,  Input::B }, /* Options */
+	{ 9,  Input::L }, /* L1 */
+	{ 10, Input::R }, /* R1 */
+	{ 15, Input::Y }, /* L2 */
+	{ 16, Input::Z }  /* R2 */
+#else
 	{ 0, Input::A },
 	{ 1, Input::B },
 	{ 2, Input::C },
@@ -111,6 +123,7 @@ static const JsBindingData defaultJsBindings[] =
 	{ 5, Input::Z },
 	{ 6, Input::L },
 	{ 7, Input::R }
+#endif
 };
 
 static elementsN(defaultJsBindings);

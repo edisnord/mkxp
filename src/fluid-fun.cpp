@@ -6,7 +6,7 @@
 
 #include "debugwriter.h"
 
-#if __LINUX__ || __ANDROID__
+#if __LINUX__ || __ANDROID__ || __FREEBSD__
 #define FLUID_LIB "libfluidsynth.so.1"
 #elif __MACOSX__
 #define FLUID_LIB "libfluidsynth.1.dylib"

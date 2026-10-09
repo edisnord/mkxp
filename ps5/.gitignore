@@ -1,0 +1,4 @@
+/build/
+/out/
+/sources/*
+!/sources/.gitkeep

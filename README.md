@@ -87,6 +87,10 @@ These depend on the SDL auxiliary libraries. For maximum RGSS compliance, build 
 
 To run mkxp, you should have a graphics card capable of at least **OpenGL (ES) 2.0** with an up-to-date driver installed.
 
+### PlayStation 5
+
+mkxp can be cross-compiled into a PS5 payload with the [ps5-payload-dev SDK](https://github.com/ps5-payload-dev/sdk). This uses a Docker-based toolchain: run `./ps5/build.sh`. See [ps5/README.md](ps5/README.md) for details.
+
 ## Dependency kit
 
 To facilitate hacking, I have assembled a package containing all dependencies to compile mkxp on a bare-bones Ubuntu 12.04 64bit installation. Compatibility with other distributions has not been tested. You can download it [here](https://mapleshrine.eu/depkits/linux64.tar.xz). Read the "README" for instructions.

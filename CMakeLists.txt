@@ -51,6 +51,9 @@ IF(LINUX)
 elseif(APPLE)
 	SET(BIN_RPATH "@executable_path/../Frameworks")
 	set(LIB_PATH "lib")
+elseif(PS5)
+	# Set by the ps5-payload-sdk toolchain file, see ps5/README.md
+	set(CMAKE_EXECUTABLE_SUFFIX ".elf")
 endif()
 
 set(CMAKE_SKIP_BUILD_RPATH TRUE)
@@ -93,6 +96,10 @@ pkg_check_modules(SDL2_IMAGE    REQUIRED SDL2_image)
 pkg_check_modules(SDL_SOUND     REQUIRED SDL_sound)
 
 find_package(Boost 1.49 COMPONENTS program_options REQUIRED)
+if(PS5)
+	# The static OpenAL Soft package links against SDL2's imported target
+	find_package(SDL2 CONFIG REQUIRED)
+endif()
 find_package(OpenAL REQUIRED)
 find_package(ZLIB REQUIRED)
 

@@ -275,9 +275,23 @@ int main(int argc, char *argv[])
 	if (conf.fullscreen)
 		winFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 
+	int winInitW = conf.defScreenW;
+	int winInitH = conf.defScreenH;
+
+#ifdef __PROSPERO__
+	/* The PS5 video driver presents windows centered and unscaled,
+	 * so cover the whole display and let mkxp do the scaling */
+	SDL_DisplayMode desktopMode;
+	if (SDL_GetDesktopDisplayMode(0, &desktopMode) == 0)
+	{
+		winInitW = desktopMode.w;
+		winInitH = desktopMode.h;
+	}
+#endif
+
 	win = SDL_CreateWindow(conf.windowTitle.c_str(),
 	                       SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-	                       conf.defScreenW, conf.defScreenH, winFlags);
+	                       winInitW, winInitH, winFlags);
 
 	if (!win)
 	{

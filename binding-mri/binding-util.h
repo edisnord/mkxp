@@ -67,7 +67,7 @@ raiseRbExc(const Exception &exc);
 
 /* 2.1 has added a new field (flags) to rb_data_type_t */
 #include <ruby/version.h>
-#if RUBY_API_VERSION_MAJOR >= 2 && RUBY_API_VERSION_MINOR >= 1
+#if RUBY_API_VERSION_MAJOR > 2 || (RUBY_API_VERSION_MAJOR == 2 && RUBY_API_VERSION_MINOR >= 1)
 /* TODO: can mkxp use RUBY_TYPED_FREE_IMMEDIATELY here? */
 #define DEF_TYPE_FLAGS 0
 #else
@@ -76,7 +76,7 @@ raiseRbExc(const Exception &exc);
 
 #define DEF_TYPE_CUSTOMNAME_AND_FREE(Klass, Name, Free) \
 	rb_data_type_t Klass##Type = { \
-		Name, { 0, Free, 0, { 0, 0 } }, 0, 0, DEF_TYPE_FLAGS \
+		Name, { 0, Free, 0 }, 0, 0, DEF_TYPE_FLAGS \
 	}
 
 #define DEF_TYPE_CUSTOMFREE(Klass, Free) \
@@ -91,7 +91,7 @@ template<rb_data_type_t *rbType>
 static VALUE classAllocate(VALUE klass)
 {
 /* 2.3 has changed the name of this function */
-#if RUBY_API_VERSION_MAJOR >= 2 && RUBY_API_VERSION_MINOR >= 3
+#if RUBY_API_VERSION_MAJOR > 2 || (RUBY_API_VERSION_MAJOR == 2 && RUBY_API_VERSION_MINOR >= 3)
 	return rb_data_typed_object_wrap(klass, 0, rbType);
 #else
 	return rb_data_typed_object_alloc(klass, 0, rbType);

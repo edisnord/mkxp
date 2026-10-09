@@ -1,0 +1,43 @@
+diff --git a/common.mk b/common.mk
+index 13f9cc5..7b099fa 100644
+--- a/common.mk
++++ b/common.mk
+@@ -83,6 +83,7 @@ MAKE_ENC      = -f $(ENC_MK) V="$(V)" UNICODE_HDR_DIR="$(UNICODE_HDR_DIR)" \
+ 		RUBY="$(BOOTSTRAPRUBY)" MINIRUBY="$(BOOTSTRAPRUBY)" $(mflags)
+ 
+ COMMONOBJS    = array.$(OBJEXT) \
++		ext/zlib/zlib.$(OBJEXT) \
+ 		ast.$(OBJEXT) \
+ 		bignum.$(OBJEXT) \
+ 		class.$(OBJEXT) \
+diff --git a/inits.c b/inits.c
+index 8c230c6..c56a5a3 100644
+--- a/inits.c
++++ b/inits.c
+@@ -77,6 +77,7 @@ rb_call_inits(void)
+     CALL(vm_stack_canary);
+     CALL(ast);
+     CALL(gc_stress);
++    CALL(zlib);
+ 
+     // enable builtin loading
+     CALL(builtin);
+diff --git a/missing/crypt.h b/missing/crypt.h
+index ff135ee..adb1b29 100644
+--- a/missing/crypt.h
++++ b/missing/crypt.h
+@@ -236,6 +236,14 @@ struct crypt_data {
+ 	char	cryptresult[1+4+4+11+1];	/* encrypted result */
+ };
+ 
++/* Avoid clashing with the (differently typed) XSI prototypes in the
++ * system unistd.h when libc lacks crypt(), as on the PS5 */
++#ifdef HAVE_UNISTD_H
++#include <unistd.h>
++#endif
++#define setkey ruby_setkey
++#define encrypt ruby_encrypt
++
+ char *crypt(const char *key, const char *setting);
+ void setkey(const char *key);
+ void encrypt(char *block, int flag);
