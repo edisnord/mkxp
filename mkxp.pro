@@ -121,6 +121,7 @@ HEADERS += \
 	src/util.h \
 	src/config.h \
 	src/settingsmenu.h \
+	src/launcher.h \
 	src/keybindings.h \
 	src/tileatlas.h \
 	src/sharedstate.h \
@@ -168,6 +169,7 @@ SOURCES += \
 	src/etc.cpp \
 	src/config.cpp \
 	src/settingsmenu.cpp \
+	src/launcher.cpp \
 	src/keybindings.cpp \
 	src/tileatlas.cpp \
 	src/sharedstate.cpp \

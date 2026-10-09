@@ -88,6 +88,9 @@ struct Config
 
 	std::vector<std::string> rubyLoadpaths;
 
+	/* Folders whose subfolders the game launcher lists */
+	std::vector<std::string> gameLibraries;
+
 	/* Editor flags */
 	struct {
 		bool debug;
@@ -103,10 +106,14 @@ struct Config
 	/* Internal */
 	std::string customDataPath;
 	std::string commonDataPath;
+	/* Working directory for script file I/O (save files), if not the game folder */
+	std::string saveFolder;
 
 	Config();
 
 	void read(int argc, char *argv[]);
+	/* Like read(), with the configuration files in order of precedence */
+	void read(int argc, char *argv[], const std::vector<std::string> &confFiles);
 	void readGameINI();
 };
 

@@ -40,10 +40,8 @@
 
 #include <unistd.h>
 #include <stdio.h>
-#ifdef MKXP_PS5_NATIVE
 #include <limits.h>
 #include "debugwriter.h"
-#endif
 #include <string>
 
 SharedState *SharedState::instance = 0;
@@ -132,22 +130,31 @@ struct SharedStatePrivate
 		}
 
 #ifdef MKXP_PS5_NATIVE
-		/* The game folder is read-only in a native title: mount it by
-		 * absolute path, so Ruby's file I/O (save files) can be pointed
-		 * at the title's writable download data below */
-		char gameDir[PATH_MAX];
-		fileSystem.addPath(getcwd(gameDir, sizeof(gameDir)) ? gameDir : ".");
+		/* The title's own folder is read-only: unless the launcher
+		 * picked a save folder, use the title's writable download data */
+		const std::string saveFolder =
+			config.saveFolder.empty() ? "/download0" : config.saveFolder;
 #else
-		fileSystem.addPath(".");
+		const std::string &saveFolder = config.saveFolder;
 #endif
+
+		if (saveFolder.empty())
+		{
+			fileSystem.addPath(".");
+		}
+		else
+		{
+			/* Mount the game folder by absolute path, so Ruby's file
+			 * I/O (save files) can be pointed at the save folder below */
+			char gameDir[PATH_MAX];
+			fileSystem.addPath(getcwd(gameDir, sizeof(gameDir)) ? gameDir : ".");
+		}
 
 		for (size_t i = 0; i < config.rtps.size(); ++i)
 			fileSystem.addPath(config.rtps[i].c_str());
 
-#ifdef MKXP_PS5_NATIVE
-		if (chdir("/download0") != 0)
-			Debug() << "Unable to switch into /download0";
-#endif
+		if (!saveFolder.empty() && chdir(saveFolder.c_str()) != 0)
+			Debug() << "Unable to switch into" << saveFolder;
 
 		if (config.pathCache)
 			fileSystem.createPathCache();

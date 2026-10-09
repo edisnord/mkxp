@@ -13,7 +13,7 @@ There are two ways to run mkxp on the console. The build produces both:
 |---|---|---|
 | Rendering | Software OpenGL (Mesa llvmpipe through OSMesa) | **GPU** OpenGL through [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) (Mesa on the PS5's AGC driver) |
 | Launch | Send to an ELF loader such as [elfldr](https://github.com/ps5-payload-dev/elfldr) | Install the folder as a title, e.g. with [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) and start it from the home screen |
-| Game location | Anywhere on the console's file system | Inside the title folder (read-only); saves go to the title's download data |
+| Choosing a game | `gameFolder=` in `mkxp.conf` | Built-in game launcher: copy game folders to `/data/mkxp/` (or a USB drive) and pick one with the controller |
 
 ## Quick start
 
@@ -44,7 +44,7 @@ Environment variables for `build.sh`:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `TARGET` | `all` | `payload`, `native` or `all` |
-| `MKXP_TITLE_ID` | `PPSA77001` | Title ID of the native title. Give each game its own ID if you install several |
+| `MKXP_TITLE_ID` | `PPSA77001` | Title ID of the native title. Only matters if you install more than one copy, e.g. single-game titles |
 | `MKXP_TITLE_NAME` | `mkxp` | Name on the home screen |
 | `MKXP_SCE_SYS` | | A directory inside this repository with replacement `icon0.png` (512×512), `pic0.dds`, `pic1.dds` and `snd0.at9` |
 
@@ -156,12 +156,22 @@ title requests. The game draws sprites through mkxp's sprite, hue, text and
 transition paths, reads the frame back and compares pixels against
 `tests/gl-smoke/expected.txt`:
 
+A third run checks the game launcher on the core profile build
+(`tests/gl-smoke/launcher-test.sh`). It puts three copies of the test game in
+a library, presses Down and Enter with `xdotool`, and checks that the second
+game ran from its own folder. To keep the launcher's screenshots, mount a
+directory at `/tmp/shots`:
+
 ```console
-$ ./ps5/tests/gl-smoke.sh
+$ ./ps5/tests/gl-smoke.sh -v "$PWD/shots:/tmp/shots"
 ==> compat profile
 GL Version   : 4.5 (Compatibility Profile) Mesa 25.2.8
 PASS
 ==> core profile
+GL Version   : 4.5 (Core Profile) Mesa 25.2.8
+PASS
+==> launcher (core profile)
+Launcher: found 3 games
 GL Version   : 4.5 (Core Profile) Mesa 25.2.8
 PASS
 ```
@@ -198,20 +208,67 @@ You need a PS5 that runs an ELF loader such as
 
 ## Running the native title
 
-1. Copy the game's files (`Game.ini`, `Data/`, `Graphics/`, `Audio/`, …) into
-   `ps5/out/PPSA77001/`, next to `eboot.bin`. Optionally add a `mkxp.conf`
-   there too. If the game sits in a subfolder, point `gameFolder=` at it,
-   relative to the title folder. RTPs can be added the same way with `RTP=`.
-2. Upload the whole `PPSA77001/` folder to `/data/homebrew/` on the console and
-   register it with a compatible loader such as ShadowMountPlus.
-   `eboot.bin` can't be deployed by itself.
-3. Start it from the home screen.
+Install the title once, then add games by copying folders. No rebuild is
+needed.
 
-The title folder is mounted read-only as `/app0`, so mkxp reads the game from
-there but runs Ruby with `/download0` (the title's persistent download data)
-as its working directory. Save files therefore end up in `/download0`, and so
-does the log, `/download0/mkxp.log`. Keep a title ID per game, so that their
-saves stay apart.
+1. Upload the whole `ps5/out/PPSA77001/` folder to `/data/homebrew/` on the
+   console, e.g. with ftpsrv, and register it with a compatible loader such as
+   ShadowMountPlus. `eboot.bin` can't be deployed by itself.
+2. Copy each game's folder (the one containing `Game.ini`, `Data/`,
+   `Graphics/`, …) into a game library:
+
+   | Library | |
+   |---------|---|
+   | `/data/mkxp/` | Internal storage |
+   | `/mnt/usb0/mkxp/`, `/mnt/usb1/mkxp/` | USB drives |
+   | `/app0/games/` | Games bundled inside the title folder (`PPSA77001/games/`) |
+
+   For example `/data/mkxp/MyGame/Game.ini`. A folder that holds just one
+   subfolder with the game (`MyGame/MyGame/Game.ini`, as archives often
+   extract) is found as well.
+3. Start **mkxp** from the home screen. The launcher lists every game it
+   found, sorted by title, with the RPG Maker version and the game's title
+   screen as a preview:
+
+   ![The game launcher](docs/launcher.png)
+
+   | DualSense | Keyboard | |
+   |-----------|----------|---|
+   | D-pad, left stick | ↑ ↓ | Select (hold to scroll) |
+   | L1 / R1 | Page Up / Down | Scroll a page |
+   | Cross | Enter | Play |
+   | Triangle | F5 | Look for games again, e.g. after copying more over FTP |
+
+The launcher starts on the game played last. Choosing a game starts mkxp's
+engine with it. Quitting the game closes the title. Start it again to pick
+another game: Ruby can only be started once per process.
+
+**Saves.** A game saves into its own folder when that folder is writable,
+as `/data` and USB drives are. That way saves sit next to the game and can be
+backed up together. Games in the read-only title folder (`/app0/games/`) save
+to `/download0/<folder name>/` instead. The log is always
+`/download0/mkxp.log`.
+
+**Configuration.** A `mkxp.conf` in the title folder applies to all games,
+e.g. `smoothScaling=false` or an `RTP=` path. A `mkxp.conf` in a game's folder
+overrides it for that game. Use absolute paths for `RTP=` and `midi.soundFont`
+in the title's `mkxp.conf`. `gameLibrary=` replaces the list of libraries and
+can be given several times:
+
+```ini
+gameLibrary=/data/rpg
+gameLibrary=/mnt/usb0/rpg
+```
+
+**Single-game titles.** If the title folder itself holds a game (a `Game.ini`
+next to `eboot.bin`), or its `mkxp.conf` sets `gameFolder=`, mkxp starts that
+game directly, without the launcher. To install games as separate home-screen
+tiles, build one title per game with its own `MKXP_TITLE_ID` and
+`MKXP_TITLE_NAME`, and copy the game into it. In this mode saves go to
+`/download0`, and separate title IDs keep them apart.
+
+The launcher also works in other builds, payload and desktop included, when
+`mkxp.conf` sets `gameLibrary=` and the working directory holds no game.
 
 ## Display and controls
 
@@ -243,8 +300,15 @@ in a USB keyboard and use mkxp's F1 menu:
   `SDL_SetMainReady`.
 - `src/keybindings.cpp`: DualSense default bindings on `__PROSPERO__`.
 - With `MKXP_PS5_NATIVE`: request an OpenGL 3.3 core context. Start in `/app0`.
-  Mount the game folder by absolute path, then switch to `/download0` for
-  Ruby's file I/O (`src/main.cpp`, `src/sharedstate.cpp`).
+  Default to the game libraries above. Mount the game folder by absolute
+  path, then switch to `/download0` (or the launcher's save folder) for
+  Ruby's file I/O (`src/main.cpp`, `src/config.cpp`, `src/sharedstate.cpp`).
+- Game launcher (`src/launcher.cpp`, any platform): runs before the engine
+  when there is no game to start, on the GL context that the RGSS thread then
+  takes over. It draws into an SDL surface with SDL_ttf and the bundled
+  Liberation Sans, and shows it as one textured quad, so it needs nothing from
+  the engine's renderer. `Config::read` can layer several `mkxp.conf` files,
+  with a new `gameLibrary` setting and an internal `saveFolder`.
 - Fixes that help any modern toolchain:
   - `binding-mri.cpp`: since Ruby 2.7, parts of the core library
     (`Kernel#class`, `Marshal.load`, …) are Ruby code that is only loaded
@@ -269,6 +333,9 @@ in a USB keyboard and use mkxp's F1 menu:
   `verify-native-test-app.sh`: segment alignment, allocator wraps, AGC/VideoOut
   imports, no forbidden unresolved symbols. The core profile rendering path is
   verified on Mesa llvmpipe (`tests/gl-smoke.sh`), but not on the PS5 GPU.
+  The same goes for the launcher, including the paths it scans and whether a
+  native title may read and write `/data` and `/mnt/usb*`. Homebrew installed
+  with ShadowMountPlus normally can.
 - Native title specifics that are outside what ps5-opengl has validated:
   - SDL audio in the native title.
   - Rendering from a thread other than the one that initialized video.
@@ -278,6 +345,9 @@ in a USB keyboard and use mkxp's F1 menu:
   expect it to be slower than on a PC.
 - No MIDI: mkxp would `dlopen()` fluidsynth, and no PS5 build of it is
   bundled. No MP3: SDL_sound is built without mpg123.
+- The launcher shows titles in Liberation Sans, which has no CJK glyphs.
+  Japanese titles in UTF-8 show as boxes. Titles that aren't UTF-8 (e.g.
+  Shift-JIS) fall back to the folder name.
 - Ruby is 3.1, not the 1.8/1.9 that RPG Maker used, and has no stdlib
   extensions. Scripts that rely on old syntax or on `require` of stdlib
   libraries need changes, as on any modern mkxp build.

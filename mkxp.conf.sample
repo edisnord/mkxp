@@ -156,6 +156,17 @@
 # gameFolder=/path/to/game
 
 
+# Folders whose subfolders hold games. If gameFolder is not
+# set and the working directory contains no Game.ini, mkxp
+# shows a launcher that lists these games to pick from.
+# Can be specified multiple times
+# (default: none; PS5 native title: /data/mkxp,
+#  /mnt/usb0/mkxp, /mnt/usb1/mkxp, /app0/games)
+#
+# gameLibrary=/path/to/games
+# gameLibrary=/path/to/more/games
+
+
 # Use either right or left Alt + Enter to toggle
 # fullscreen
 # (default: disabled)

@@ -239,6 +239,9 @@ struct RGSSThreadData
 	SDL_Window *window;
 	ALCdevice *alcDev;
 
+	/* GL context to use instead of creating one, if any */
+	SDL_GLContext glContext;
+
 	Vec2 sizeResoRatio;
 	Vec2i screenOffset;
 	const int refreshRate;
@@ -257,6 +260,7 @@ struct RGSSThreadData
 	      argv0(argv0),
 	      window(window),
 	      alcDev(alcDev),
+	      glContext(0),
 	      sizeResoRatio(1, 1),
 	      refreshRate(refreshRate),
 	      config(newconf)

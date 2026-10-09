@@ -2,7 +2,9 @@
 # Builds mkxp for Linux against Ubuntu's libraries and runs the smoke test
 # game with Mesa's llvmpipe under Xvfb, once with a compatibility context
 # and once with the OpenGL 3.3 core context the PS5 native title uses.
+# Then checks the game launcher with the core profile build.
 # Runs inside ubuntu:24.04 with the repository mounted read-only at /src.
+# Screenshots of the launcher end up in ${SHOTS:-/tmp/shots}.
 
 set -euo pipefail
 
@@ -12,7 +14,7 @@ apt-get install -y -qq --no-install-recommends \
     build-essential cmake pkg-config git ca-certificates autoconf automake libtool \
     libsigc++-2.0-dev libpixman-1-dev libphysfs-dev libboost-program-options-dev \
     libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libopenal-dev libvorbis-dev \
-    zlib1g-dev ruby ruby-dev xxd xvfb xauth libgl1-mesa-dri > /dev/null
+    zlib1g-dev ruby ruby-dev xxd xvfb xauth libgl1-mesa-dri xdotool imagemagick > /dev/null
 
 # mkxp's SDL_sound fork, as in ps5/scripts/build-deps.sh
 git clone -q https://github.com/Ancurio/SDL_sound.git /tmp/SDL_sound
@@ -67,4 +69,9 @@ for profile in compat core; do
         status=1
     fi
 done
+
+echo "==> launcher (core profile)"
+bash "${test_dir}/launcher-test.sh" /tmp/mkxp/build/mkxp.bin.x86_64 "${test_dir}" \
+     "${SHOTS:-/tmp/shots}" || status=1
+
 exit "${status}"

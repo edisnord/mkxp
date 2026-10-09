@@ -27,6 +27,7 @@
 #include <SDL_sound.h>
 
 #include <unistd.h>
+#include <limits.h>
 #include <string.h>
 #include <assert.h>
 #include <string>
@@ -37,6 +38,7 @@
 #include "debugwriter.h"
 #include "exception.h"
 #include "gl-fun.h"
+#include "launcher.h"
 
 #include "binding.h"
 
@@ -69,14 +71,8 @@ printGLInfo()
 	Debug() << "GLSL Version :" << glGetStringInt(GL_SHADING_LANGUAGE_VERSION);
 }
 
-int rgssThreadFun(void *userdata)
+static void setupGLAttributes(const Config &conf)
 {
-	RGSSThreadData *threadData = static_cast<RGSSThreadData*>(userdata);
-	const Config &conf = threadData->config;
-	SDL_Window *win = threadData->window;
-	SDL_GLContext glCtx;
-
-	/* Setup GL context */
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
 #ifdef MKXP_PS5_NATIVE
@@ -88,8 +84,31 @@ int rgssThreadFun(void *userdata)
 
 	if (conf.debugMode)
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+}
 
-	glCtx = SDL_GL_CreateContext(win);
+int rgssThreadFun(void *userdata)
+{
+	RGSSThreadData *threadData = static_cast<RGSSThreadData*>(userdata);
+	const Config &conf = threadData->config;
+	SDL_Window *win = threadData->window;
+
+	/* Setup GL context, or take over the launcher's */
+	SDL_GLContext glCtx = threadData->glContext;
+
+	if (glCtx)
+	{
+		if (SDL_GL_MakeCurrent(win, glCtx) != 0)
+		{
+			rgssThreadError(threadData, std::string("Error activating context: ") + SDL_GetError());
+			SDL_GL_DeleteContext(glCtx);
+			return 0;
+		}
+	}
+	else
+	{
+		setupGLAttributes(conf);
+		glCtx = SDL_GL_CreateContext(win);
+	}
 
 	if (!glCtx)
 	{
@@ -240,20 +259,32 @@ int main(int argc, char *argv[])
 	Config conf;
 	conf.read(argc, argv);
 
-	if (!conf.gameFolder.empty())
-		if (chdir(conf.gameFolder.c_str()) != 0)
-		{
-			showInitError(std::string("Unable to switch into gameFolder ") + conf.gameFolder);
-			return 0;
-		}
+	/* Without a game to run, let the user pick one once there's a window */
+	const bool launcher = Launcher::wanted(conf);
+	char launcherDir[PATH_MAX] = ".";
 
-	conf.readGameINI();
+	if (launcher)
+	{
+		if (!getcwd(launcherDir, sizeof(launcherDir)))
+			strcpy(launcherDir, ".");
 
-	if (conf.windowTitle.empty())
-		conf.windowTitle = conf.game.title;
+		if (conf.windowTitle.empty())
+			conf.windowTitle = "mkxp";
+	}
+	else
+	{
+		if (!conf.gameFolder.empty())
+			if (chdir(conf.gameFolder.c_str()) != 0)
+			{
+				showInitError(std::string("Unable to switch into gameFolder ") + conf.gameFolder);
+				return 0;
+			}
 
-	assert(conf.rgssVersion >= 1 && conf.rgssVersion <= 3);
-	printRgssVersion(conf.rgssVersion);
+		conf.readGameINI();
+
+		if (conf.windowTitle.empty())
+			conf.windowTitle = conf.game.title;
+	}
 
 	int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
 	if (IMG_Init(imgFlags) != imgFlags)
@@ -294,6 +325,12 @@ int main(int argc, char *argv[])
 	int winInitW = conf.defScreenW;
 	int winInitH = conf.defScreenH;
 
+	if (launcher && (winInitW <= 0 || winInitH <= 0))
+	{
+		winInitW = 1280;
+		winInitH = 720;
+	}
+
 #ifdef __PROSPERO__
 	/* The PS5 video driver presents windows centered and unscaled,
 	 * so cover the whole display and let mkxp do the scaling */
@@ -323,11 +360,87 @@ int main(int argc, char *argv[])
 	(void) setupWindowIcon;
 #endif
 
+	SDL_GLContext launcherCtx = 0;
+
+	if (launcher)
+	{
+		/* The launcher draws with the context the engine will use */
+		setupGLAttributes(conf);
+		launcherCtx = SDL_GL_CreateContext(win);
+
+		std::string gameDir;
+
+		if (!launcherCtx)
+		{
+			showInitError(std::string("Error creating context: ") + SDL_GetError());
+		}
+		else
+		{
+			try
+			{
+				initGLFunctions();
+				SDL_GL_SetSwapInterval(1);
+				gameDir = Launcher::run(win, conf);
+			}
+			catch (const Exception &exc)
+			{
+				showInitError(exc.msg);
+			}
+
+			/* Hand the context over to the RGSS thread */
+			SDL_GL_MakeCurrent(win, 0);
+		}
+
+		if (gameDir.empty() || chdir(gameDir.c_str()) != 0)
+		{
+			if (!gameDir.empty())
+				showInitError("Unable to switch into " + gameDir);
+
+			if (launcherCtx)
+				SDL_GL_DeleteContext(launcherCtx);
+			SDL_DestroyWindow(win);
+			Sound_Quit();
+			TTF_Quit();
+			IMG_Quit();
+			SDL_Quit();
+
+			return 0;
+		}
+
+		/* A mkxp.conf in the game folder takes precedence over the launcher's */
+		std::vector<std::string> confFiles;
+		confFiles.push_back("mkxp.conf");
+		confFiles.push_back(std::string(launcherDir) + "/mkxp.conf");
+
+		Config gameConf;
+		gameConf.read(argc, argv, confFiles);
+		gameConf.gameFolder = gameDir;
+		gameConf.saveFolder = Launcher::saveFolder(gameDir, gameConf);
+		conf = gameConf;
+
+		conf.readGameINI();
+
+		if (conf.windowTitle.empty())
+			conf.windowTitle = conf.game.title;
+
+		SDL_SetWindowTitle(win, conf.windowTitle.c_str());
+
+#ifndef __PROSPERO__
+		if (!conf.fullscreen)
+			SDL_SetWindowSize(win, conf.defScreenW, conf.defScreenH);
+#endif
+	}
+
+	assert(conf.rgssVersion >= 1 && conf.rgssVersion <= 3);
+	printRgssVersion(conf.rgssVersion);
+
 	ALCdevice *alcDev = alcOpenDevice(0);
 
 	if (!alcDev)
 	{
 		showInitError("Error opening OpenAL device");
+		if (launcherCtx)
+			SDL_GL_DeleteContext(launcherCtx);
 		SDL_DestroyWindow(win);
 		TTF_Quit();
 		IMG_Quit();
@@ -346,6 +459,7 @@ int main(int argc, char *argv[])
 	EventThread eventThread;
 	RGSSThreadData rtData(&eventThread, argv[0], win,
 	                      alcDev, mode.refresh_rate, conf);
+	rtData.glContext = launcherCtx;
 
 	int winW, winH;
 	SDL_GetWindowSize(win, &winW, &winH);

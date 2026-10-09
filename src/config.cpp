@@ -151,6 +151,11 @@ Config::Config()
 
 void Config::read(int argc, char *argv[])
 {
+	read(argc, argv, std::vector<std::string>(1, CONF_FILE));
+}
+
+void Config::read(int argc, char *argv[], const std::vector<std::string> &confFiles)
+{
 #define PO_DESC_ALL \
 	PO_DESC(rgssVersion, int, 0) \
 	PO_DESC(debugMode, bool, false) \
@@ -220,6 +225,7 @@ void Config::read(int argc, char *argv[])
 	        ("RTP", po::value<StringVec>()->composing())
 	        ("fontSub", po::value<StringVec>()->composing())
 	        ("rubyLoadpath", po::value<StringVec>()->composing())
+	        ("gameLibrary", po::value<StringVec>()->composing())
 	        ;
 
 	po::variables_map vm;
@@ -236,11 +242,14 @@ void Config::read(int argc, char *argv[])
 		Debug() << "Command line:" << error.what();
 	}
 
-	/* Parse configuration file */
-	SDLRWStream confFile(CONF_FILE, "r");
-
-	if (confFile)
+	/* Parse configuration files; values from earlier ones take precedence */
+	for (size_t i = 0; i < confFiles.size(); ++i)
 	{
+		SDLRWStream confFile(confFiles[i].c_str(), "r");
+
+		if (!confFile)
+			continue;
+
 		try
 		{
 			po::store(po::parse_config_file(confFile.stream(), podesc, true), vm);
@@ -248,7 +257,7 @@ void Config::read(int argc, char *argv[])
 		}
 		catch (po::error &error)
 		{
-			Debug() << CONF_FILE":" << error.what();
+			Debug() << confFiles[i] + ":" << error.what();
 		}
 	}
 
@@ -264,6 +273,19 @@ void Config::read(int argc, char *argv[])
 	GUARD_ALL( fontSubs = vm["fontSub"].as<StringVec>(); );
 
 	GUARD_ALL( rubyLoadpaths = vm["rubyLoadpath"].as<StringVec>(); );
+
+	GUARD_ALL( gameLibraries = vm["gameLibrary"].as<StringVec>(); );
+
+#ifdef MKXP_PS5_NATIVE
+	/* Internal storage, USB drives, and games bundled with the title */
+	if (gameLibraries.empty())
+	{
+		const char *defaults[] =
+			{ "/data/mkxp", "/mnt/usb0/mkxp", "/mnt/usb1/mkxp", "/app0/games" };
+
+		gameLibraries.assign(defaults, defaults + 4);
+	}
+#endif
 
 #undef PO_DESC
 #undef PO_DESC_ALL
